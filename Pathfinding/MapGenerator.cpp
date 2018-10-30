@@ -34,7 +34,7 @@ namespace MapGenerator {
 
 	bool inBounds(tile t, grid g) {
 		int w = g[0].size(); int h = g.size();
-		return (t.first > 0 && t.first < h && t.second > 0 && t.second < w);
+		return (t.first >= 0 && t.first < h && t.second >= 0 && t.second < w);
 	}
 
 	// only applies to tiles of value 0, which represents unlabelled land
@@ -52,9 +52,9 @@ namespace MapGenerator {
 		if (inBounds(s, g) && g[s.first][s.second] == 0) floodFill(g, s, label);
 	}
 
-	void replaceValue(grid &g, int a, int b) {
+	void replaceAll(grid &g, int a, int b) {
 		for (size_t i = 0; i < g.size(); ++i) {
-			for (size_t j = 0; i < g[0].size(); ++j) {
+			for (size_t j = 0; j < g[0].size(); ++j) {
 				if (g[i][j] == a) g[i][j] = b;
 			}
 		}
@@ -65,42 +65,55 @@ namespace MapGenerator {
 	// obstacles are labelled -1
 	grid labelConnectedComponents(grid g) {
 		auto ccLabelledGrid(g);
-		replaceValue(ccLabelledGrid, 1, -1);
+		replaceAll(ccLabelledGrid, 1, -1);
 		int ccCount = 0;
 		tile t = findTileWithValue(g, 0);
 		while (t.first >= 0) {					// while t is a valid tile
 			ccCount++;
-			floodFill(g, t, ccCount);
-			t = findTileWithValue(g, 0);
+			floodFill(ccLabelledGrid, t, ccCount);
+			t = findTileWithValue(ccLabelledGrid, 0);
 		}
 		return ccLabelledGrid;
 	}
 
 	// creates an obstacle-free path (of 0s) between two tiles
 	void connectTiles(grid &g, tile t1, tile t2) {
-		// go R, then U
-		// shuffle (?) walk with random chance between either...
-		// fill in on grid
-		// stop your walk once you hit any tile of the right value
+		tile current = tile(t1);
+		while (current != t2) {
+			int xdiff = t2.second - current.second;
+			int ydiff = t2.first - current.first;
+			g[current.first][current.second] = 0;
+			if (xdiff != 0 && (rand() % 2 == 0)) {
+				if (xdiff > 0) {current.second++; }
+				else { current.second--; }
+			}
+			else if (ydiff != 0) {
+				if (ydiff > 0) { current.first++; }
+				else if (ydiff < 0) { current.first--; }
+			}
+		}
 	}
 
 	// takes: grid g, grid ccLabelledGrid of connected components of g.
 	// modifies g so that all the land '0' tiles are connected
 	void connectGrid(grid &g, grid ccLabelledGrid) {
 		list<tile> componentTileList;
-		tile x = pair<int, int>(0, 0);
-		for (int i = 1; x.first >= 0; ++i) {
-			x = findTileWithValue(g, i);
+		tile x = findTileWithValue(ccLabelledGrid, 1);
+		for (int i = 2; x.first >= 0; ++i) {
 			componentTileList.push_back(x);
+			x = findTileWithValue(ccLabelledGrid, i);
 		}
 
 		auto it = componentTileList.begin();
-		while (it != componentTileList.end()) {
-			connectTiles(g, *it, *(++it));
+		while (next(it) != componentTileList.end()) {
+			connectTiles(g, *it, *next(it));
+			it++;
 		}
 	}
 
 	Map generate(int w, int h) {
-		return Map(generateUnconnectedGrid(w, h));
+		grid g = generateUnconnectedGrid(w, h);
+		connectGrid(g, labelConnectedComponents(g));
+		return g;
 	}
 }
